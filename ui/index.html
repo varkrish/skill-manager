@@ -388,6 +388,8 @@ function renderResults(results, label, total) {
             data-repo="${escAttr(r.repo)}"
             data-slug="${escAttr(slug)}"
             data-github-path="${escAttr(r.githubPath || '')}"
+            data-github-branch="${escAttr(r.githubBranch || '')}"
+            data-github-sha="${escAttr(r.githubSha || '')}"
             onclick="installFromCard(this)">Install</button>
         </div>
       </div>`;
@@ -435,8 +437,21 @@ async function scanRepo() {
     '<div class="empty"><span class="spinner"></span> Scanning repository for skills…</div>';
 
   try {
-    const res = await fetch(`/api/github/scan?repo_url=${encodeURIComponent(repoInput)}`);
-    const data = await res.json();
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 90000); // 90s client timeout
+    let res;
+    try {
+      res = await fetch(`/api/github/scan?repo_url=${encodeURIComponent(repoInput)}`,
+                        { signal: controller.signal });
+    } finally {
+      clearTimeout(tid);
+    }
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error('Scan timed out or server returned an unexpected response. Try a smaller repo.');
+    }
     if (!res.ok) throw new Error(data.detail || 'Scan failed');
     scannedOwner = data.owner;
     scannedRepo  = data.repo;
@@ -511,7 +526,7 @@ async function pollJob(jobId, { onProgress, onDone, onError, intervalMs = 800 } 
 
 // ── Single skill install (via marketplace card) ────────────────────────────
 async function installFromCard(btn) {
-  const { owner, repo, slug, githubPath } = btn.dataset;
+  const { owner, repo, slug, githubPath, githubBranch, githubSha } = btn.dataset;
   if (installing.has(slug)) return;
   installing.add(slug);
   btn.disabled = true;
@@ -521,7 +536,12 @@ async function installFromCard(btn) {
     const res = await fetch('/api/marketplace/install', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ owner, repo, slug, github_path: githubPath || '' }),
+      body: JSON.stringify({
+        owner, repo, slug,
+        github_path:   githubPath   || '',
+        github_branch: githubBranch || '',
+        github_sha:    githubSha    || '',
+      }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Install failed');

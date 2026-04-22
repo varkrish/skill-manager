@@ -83,7 +83,9 @@ class InstallRequest(BaseModel):
     owner: str
     repo: str
     slug: str
-    github_path: str = ""  # exact path from agentskill.sh (e.g. "skill.md")
+    github_path: str = ""    # exact path from agentskill.sh
+    github_branch: str = ""  # branch at crawl time (e.g. "main")
+    github_sha: str = ""     # commit SHA at crawl time — most reliable ref
 
 
 class SkillEntry(BaseModel):
@@ -168,13 +170,20 @@ async def install_skill(req: InstallRequest, background_tasks: BackgroundTasks):
         owner, repo = req.owner.strip(), req.repo.strip()
 
     slug = req.slug.strip().lower().replace(" ", "-") or f"{owner}-{repo}".lower()
-    github_path = req.github_path.strip()
+    github_path   = req.github_path.strip()
+    github_branch = req.github_branch.strip()
+    github_sha    = req.github_sha.strip()
     job  = _new_job(total=1)
 
     async def _do():
         job.state = "running"
         try:
-            content = await mkt.fetch_skill_md(owner, repo, slug, github_path=github_path)
+            content = await mkt.fetch_skill_md(
+                owner, repo, slug,
+                github_path=github_path,
+                github_branch=github_branch,
+                github_sha=github_sha,
+            )
             skill_dir = MARKETPLACE_DIR / slug
             skill_dir.mkdir(parents=True, exist_ok=True)
             (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")

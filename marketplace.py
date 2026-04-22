@@ -40,8 +40,8 @@ def _normalize(raw_skill: dict) -> dict:
     # Preserve the full slug for the agentskill.sh page URL: /@owner/skill-name
     marketplace_url = f"https://agentskill.sh/@{raw_slug}" if raw_slug else ""
     github_path = raw_skill.get("githubPath", "")
-    # Normalize case-insensitive filename variants (e.g. "skill.md" → "SKILL.md")
     branch = raw_skill.get("githubBranch", "")
+    sha = raw_skill.get("githubSha", "")
     return {
         "slug": slug,
         "name": raw_skill.get("name", slug),
@@ -57,6 +57,7 @@ def _normalize(raw_skill: dict) -> dict:
         "tags": raw_skill.get("tags", []),
         "githubPath": github_path,
         "githubBranch": branch,
+        "githubSha": sha,
         "avatarUrl": raw_skill.get("avatarUrl", ""),
         "trendingScore": raw_skill.get("trendingScore", 0),
         "marketplaceUrl": marketplace_url,
@@ -242,39 +243,66 @@ def _parse_frontmatter(content: str, fallback_name: str) -> tuple[str, str]:
 
 
 async def fetch_skill_md(
-    owner: str, repo: str, slug: str = "", github_path: str = "",
+    owner: str,
+    repo: str,
+    slug: str = "",
+    github_path: str = "",
+    github_branch: str = "",
+    github_sha: str = "",
 ) -> str:
     """
     Fetch SKILL.md from GitHub for a given owner/repo.
 
-    If github_path is provided (from agentskill.sh metadata), it is tried
-    first as the exact path. Otherwise falls back to probing multiple
-    candidate paths for different repo layouts.
+    Priority:
+      1. Exact SHA ref + github_path  (most reliable — agentskill.sh stores the crawled commit)
+      2. Explicit branch + github_path
+      3. main / master branch + github_path
+      4. main / master branch + common slug-based fallback paths
     """
-    candidates = []
+    raw_base = f"https://raw.githubusercontent.com/{owner}/{repo}"
+
+    path_candidates = []
     if github_path:
-        candidates.append(github_path)
+        path_candidates.append(github_path)
     if slug:
-        candidates += [
+        path_candidates += [
             f"skills/{slug}/SKILL.md",
             f"skill/{slug}/SKILL.md",
             f"{slug}/SKILL.md",
         ]
-    candidates += ["SKILL.md", "skill/SKILL.md"]
+    path_candidates += ["SKILL.md", "skill/SKILL.md"]
     if slug and slug != repo:
-        candidates += [f".cursor/skills/{slug}/SKILL.md"]
+        path_candidates.append(f".cursor/skills/{slug}/SKILL.md")
+
+    # Build ordered list of (ref, path) to try — specific SHA first
+    refs_and_paths: list[tuple[str, str]] = []
+    if github_sha and github_path:
+        refs_and_paths.append((github_sha, github_path))
+    if github_branch and github_branch not in ("main", "master"):
+        for p in path_candidates:
+            refs_and_paths.append((github_branch, p))
+    for branch in ("main", "master"):
+        for p in path_candidates:
+            refs_and_paths.append((branch, p))
+
+    # Deduplicate while preserving order
+    seen: set[tuple[str, str]] = set()
+    unique: list[tuple[str, str]] = []
+    for item in refs_and_paths:
+        if item not in seen:
+            seen.add(item)
+            unique.append(item)
 
     async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-        for branch in ("main", "master"):
-            for path in candidates:
-                url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}"
-                r = await client.get(url)
-                if r.status_code == 200:
-                    logger.debug("Found SKILL.md at %s", url)
-                    return r.text
+        for ref, path in unique:
+            url = f"{raw_base}/{ref}/{path}"
+            r = await client.get(url)
+            if r.status_code == 200:
+                logger.debug("Found SKILL.md at %s", url)
+                return r.text
 
-    tried = ", ".join(candidates)
-    raise ValueError(f"SKILL.md not found for {owner}/{repo} slug={slug!r} (tried: {tried})")
+    tried = ", ".join(f"{ref}/{p}" for ref, p in unique[:8])
+    raise ValueError(f"SKILL.md not found for {owner}/{repo} slug={slug!r} (tried: {tried}…)")
 
 
 async def trigger_reindex(skills_service_url: str) -> None:
