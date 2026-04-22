@@ -1,0 +1,24 @@
+[project]
+name = "skill-manager"
+version = "0.2.0"
+description = "Skill marketplace search, GitHub scanning, and installation manager for the OPL AI platform"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.29.0",
+    "httpx>=0.28.0",
+    "jinja2>=3.1.0",
+    "pyyaml>=6.0.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.28.0",
+    "respx>=0.22.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
