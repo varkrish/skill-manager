@@ -33,13 +33,15 @@ podman run -p 8091:8091 \
 
 ### Run as part of OPL Crew (dev compose)
 
-This service is a **Git submodule** of [opl_ai_mono](https://github.com/varkrish/opl-crew-mono) at `skill-manager/`. Clone the mono repo with submodules:
+This service is a **Git submodule** of [opl_ai_mono](https://github.com/varkrish/opl-crew-mono) at `skill-manager/` (alongside `skills-service/`, which must be running for installs to trigger reindex). Clone the mono repo with submodules:
 
 ```bash
 git clone --recurse-submodules https://github.com/varkrish/opl-crew-mono.git opl_ai_mono
-cd opl_ai_mono
-podman compose -f dev-compose.yml up -d skill-manager
+cd opl_ai_mono && git submodule update --init skills-service skill-manager
+podman compose -f dev-compose.yml up -d skills-service skill-manager
 ```
+
+Optional `.env` overrides: `SKILL_MANAGER_DIR`, `SKILLS_SERVICE_DIR`, `FRAPPE_SKILLS_DIR` (see mono `dev-compose.yml`).
 
 ## API
 
