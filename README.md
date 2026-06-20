@@ -38,7 +38,7 @@ This service is a **Git submodule** of [opl_ai_mono](https://github.com/varkrish
 ```bash
 git clone --recurse-submodules https://github.com/varkrish/opl-crew-mono.git opl_ai_mono
 cd opl_ai_mono && git submodule update --init skills-service skill-manager
-podman compose -f dev-compose.yml up -d skills-service skill-manager
+podman compose -f dev-compose.yml --profile skills up -d
 ```
 
 Optional `.env` overrides: `SKILL_MANAGER_DIR`, `SKILLS_SERVICE_DIR`, `FRAPPE_SKILLS_DIR` (see mono `dev-compose.yml`).
